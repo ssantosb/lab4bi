@@ -1,47 +1,38 @@
-from fastapi import FastAPI
-from joblib import load
+from fastapi import Request, FastAPI
+from sklearn.metrics import r2_score
 import pandas as pd
-from pydantic import BaseModel
+import json
+import Models
+
+
 app = FastAPI()
+ML_model = Models.LinearRegressionModel()
 
 
-class DataModel(BaseModel):
-
-    adult_mortality: float
-    infant_deaths: float
-    alcohol: float
-    percentage_expenditure: float
-    hepatitis_B: float
-    measles: float
-    bmi: float
-    under_five_deaths: float
-    polio: float
-    total_expenditure: float
-    diphtheria: float
-    hiv_aids: float
-    gdp: float
-    population: float
-    thinness_10_19_years: float
-    thinness_5_9_years: float
-    income_composition_of_resources: float
-    schooling: float
+@app.post("/predict")
+def make_predictions(prediction_model: Models.DataModel):
+    df = pd.DataFrame(prediction_model.dict(), columns=prediction_model.dict().keys(), index=[0])
+    df.columns = Models.prediction_columns()
+    result = ML_model.make_predictions(df)
+    return result.tolist()
 
 
-def columns():
-    return ["Adult Mortality", "infant deaths", "Alcohol", "percentage expenditure", "Hepatitis B", "Measles",
-            "BMI", "under-five deaths", "Polio", "Total expenditure", "Diphtheria", "HIV/AIDS", "DGP", "Population",
-            "thinness 10-19 years", "thinness 5-9 years", "Income composition of resources", "Schooling"]
+@app.post("/r2")
+async def calculate_r2(request_body: Request):
+    req_info = await request_body.json()
+    json_string = json.dumps([ob for ob in req_info])
+    df = pd.read_json(json_string)
+    df.columns = Models.r2_columns()
+
+    x = df.drop('Life expectancy', axis=1)
+    y = df['Life expectancy']
+
+    y_prediction = ML_model.make_predictions(x)
+    r2 = r2_score(y, y_prediction)
+
+    return "'R²: %.2f" % r2
 
 
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
-
-
-@app.post("/predict")
-def make_predictions(data_model: DataModel):
-    df = pd.DataFrame(data_model.dict(), columns=data_model.dict().keys(), index=[0])
-    df.columns = columns()
-    model = load("assets/modelo.joblib")
-    result = model.predict(df)
-    return result.tolist()
